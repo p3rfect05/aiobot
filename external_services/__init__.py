@@ -1,2 +1,2 @@
 from .orioks_api import get_student_info
-from . import page_preview
+from . import page_preview, vk_api

@@ -13,6 +13,7 @@ class UserAllowanceMiddleware(BaseMiddleware):
             event: Message | CallbackQuery,
             data: Dict[str, Any],
     ) -> Any:
+        print(event.from_user.id)
         if event.from_user.id not in self.admin_list:
             await event.answer("Sorry, you are not in the admins\' list:(")
         else:
