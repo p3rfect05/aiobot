@@ -25,7 +25,7 @@ def load_config() -> Config:
     env.read_env()
 
     config = Config(
-        tg_bot=TgBot(token=env("BOT_TOKEN"), admin_ids=[6191665532]),#513680694
+        tg_bot=TgBot(token=env("BOT_TOKEN"), admin_ids=[6191665532, 513680694]),#513680694
     )
     return config
 
