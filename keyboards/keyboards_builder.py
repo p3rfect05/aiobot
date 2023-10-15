@@ -29,7 +29,7 @@ def create_inline_keyboard(width: int, *args: str, **kwargs: str) -> InlineKeybo
         for button, text in kwargs.items():
             buttons.append(InlineKeyboardButton(text=text, callback_data=button))
 
-    kb_builder.row(*buttons)
+    kb_builder.row(*buttons, width=1)
 
     return kb_builder.as_markup(resize_keyboard=True)
 
