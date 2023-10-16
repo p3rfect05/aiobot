@@ -12,13 +12,14 @@ from aiogram.filters import Command, CommandStart, StateFilter
 from docx2pdf import convert
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
-from sqlalchemy.orm import selectinload
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram3_calendar import simple_cal_callback
 from external_services.simple_calendar import SimpleCalendar
-from models import UserModel, StorageModel
+from models import UserModel, StorageModel, ReminderModel
 from external_services import get_student_info, doc_to_pdf_converter
 from keyboards import create_inline_keyboard
-
+from services import *
+from .schedule_handlers import *
 router = Router()
 FILES_PER_PAGE = 5
 
@@ -29,6 +30,7 @@ class FSMFileSaving(StatesGroup):
 class FSMReminder(StatesGroup):
     choose_date = State()
     choose_time = State()
+    set_description = State()
 @router.message(CommandStart(), StateFilter(default_state))
 async def start_processing(message: Message, session_maker: async_sessionmaker):
     async with session_maker() as session:
@@ -190,15 +192,15 @@ async def display_calendar(message: Message, state: FSMContext):
 @router.callback_query(simple_cal_callback.filter(), StateFilter(FSMReminder.choose_date))
 async def process_date_selection(callback: CallbackQuery, callback_data: dict, state: FSMContext):
     selected, date = await SimpleCalendar().process_selection(callback, callback_data)
-    current_date = datetime.datetime.date(datetime.datetime.now())
-    if selected and datetime.datetime.date(date) >= current_date:
+
+    if selected and check_reminder_date(date):
         await callback.message.delete()
-        await callback.message.answer(
-            f'You selected {date.strftime("%d/%m/%Y")}',
-        )
+        # await callback.message.answer(
+        #     f'You selected {date.strftime("%d/%m/%Y")}',
+        # )
         await callback.message.answer("Now enter time in the 24h format(for example 19:30)")
         await state.set_state(FSMReminder.choose_time)
-        await state.update_data({'date' : date.strftime("%d/%m/%Y")})
+        await state.update_data({'date' : date})
     elif selected:
         await callback.answer(show_alert=True, text='You cannot set the reminder in the past')
 
@@ -207,11 +209,33 @@ async def process_time_selection(message: Message, state: FSMContext):
     text = message.text.split(':')
     try:
         hours, minutes = int(text[0]), int(text[1])
-        if hours in range(24) and minutes in range(60):
-            date = (await state.get_data())['date']
-            await message.answer(f"Reminder on {date}, at {hours}:{minutes} set successfully!")
-            await state.clear()
+        date = (await state.get_data())['date']
+        if check_reminder_time(hours, minutes, date):
+            await message.answer(f"Now set the description for the reminder (not exceeding 100 symbols)")
+            await state.update_data({'time' : [hours, minutes]})
+            await state.set_state(FSMReminder.set_description)
         else:
             raise ValueError
     except ValueError:
-        await message.answer('Invalid format for the time!')
+        await message.answer('Invalid format for the time (or you set the reminder in the past)!')
+
+@router.message(F.text.as_('desc'), F.text.len() < 100, StateFilter(FSMReminder.set_description))
+async def process_desc_setting(message: Message, state: FSMContext, session_maker: async_sessionmaker,
+                               desc: str, bot: Bot, apscheduler: AsyncIOScheduler):
+    date: datetime.datetime = (await state.get_data())['date']
+    hours, minutes = (await state.get_data())['time']
+    await message.answer(f"Reminder:{message.text}\nSet on <b><i>{date.strftime('%d/%m/%Y')}</i></b>, "
+                         f"at <b><i>{hours}:{minutes}</i></b> set successfully!")
+    date_with_time = date.replace(hour=hours, minute=minutes)
+    async with session_maker.begin() as session:
+        new_reminder = ReminderModel(reminder_type='date', reminder_desc=desc, # noqa
+                                     user_fk = message.from_user.id, time_triggers=date_with_time) # noqa
+        session.add(new_reminder)
+    apscheduler.add_job(send_reminder, trigger='date', run_date=date_with_time,
+                      kwargs={'bot' : bot, 'chat_id' : message.chat.id, 'description' : desc})
+    await state.clear()
+
+
+@router.message(StateFilter(FSMReminder.set_description))
+async def process_invalid_desc_setting(message: Message):
+    await message.answer("Invalid description: it must be a string not exceeding 100 symbols!")

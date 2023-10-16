@@ -12,7 +12,7 @@ def get_vk_auth_link() -> str:
     scope = 'offline'
     params={'redirect_uri' : redirect_uri, 'client_id' : client_id,
             'display' : display, 'response_type' : response_type,
-                                                 'scope' : scope}
+            'scope' : scope}
     return f'{auth_url}?{urllib.parse.urlencode(params)}'
 
 
