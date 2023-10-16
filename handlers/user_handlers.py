@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os.path
 import re
 
@@ -8,10 +9,12 @@ from aiogram.fsm.state import StatesGroup, State, default_state
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command, CommandStart, StateFilter
-from sqlalchemy import select
+from docx2pdf import convert
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import selectinload
-
+from aiogram3_calendar import simple_cal_callback
+from external_services.simple_calendar import SimpleCalendar
 from models import UserModel, StorageModel
 from external_services import get_student_info, doc_to_pdf_converter
 from keyboards import create_inline_keyboard
@@ -23,8 +26,10 @@ FILES_PER_PAGE = 5
 class FSMFileSaving(StatesGroup):
     acquire_file = State()
 
-
-@router.message(CommandStart())
+class FSMReminder(StatesGroup):
+    choose_date = State()
+    choose_time = State()
+@router.message(CommandStart(), StateFilter(default_state))
 async def start_processing(message: Message, session_maker: async_sessionmaker):
     async with session_maker() as session:
         result = await session.get(UserModel, message.from_user.id)
@@ -35,7 +40,7 @@ async def start_processing(message: Message, session_maker: async_sessionmaker):
     await message.answer('hello!')
 
 
-@router.message(Command(commands=['get_orioks_info']))
+@router.message(Command(commands=['get_orioks_info']), StateFilter(default_state))
 async def get_orioks_info(message: Message):
     result = await get_student_info()
     str_res = ''
@@ -44,15 +49,15 @@ async def get_orioks_info(message: Message):
     await message.answer(str_res)
 
 
-# @router.message(F.document, lambda message: re.search(r'[.]doc|[.]docx', message.document.file_name))
-# async def process_photo(message: Message, bot: Bot):
-#     print(message.document.file_name)
-#     ext = message.document.file_name.split('.')[-1]
-#     file_info = await bot.get_file(message.document.file_id)
-#     dest = os.path.abspath(f'external_services/new_image/{message.document.file_name}')
-#     await bot.download_file(file_path=file_info.file_path, destination=dest)
-#     convert(dest)
-#     await bot.send_document(message.chat.id, document=FSInputFile(dest.replace(ext, 'pdf')))
+@router.message(F.document, lambda message: re.search(r'[.]doc|[.]docx', message.document.file_name))
+async def process_photo(message: Message, bot: Bot):
+    print(message.document.file_name)
+    ext = message.document.file_name.split('.')[-1]
+    file_info = await bot.get_file(message.document.file_id)
+    dest = os.path.abspath(f'external_services/new_image/{message.document.file_name}')
+    await bot.download_file(file_path=file_info.file_path, destination=dest)
+    convert(dest)
+    await bot.send_document(message.chat.id, document=FSInputFile(dest.replace(ext, 'pdf')))
 
 
 @router.message(Command(commands='save'), StateFilter(default_state))
@@ -84,7 +89,7 @@ async def invalid_type_save_file(message: Message):
     await message.answer("The type of the message is not supported")
 
 
-@router.message(Command(commands='files'))
+@router.message(Command(commands='files'), StateFilter(default_state))
 async def show_saved_files(message: Message):
     await message.answer("Choose a folder!",
                          reply_markup=create_inline_keyboard(1, **{'storage:photo:1': 'Photos',
@@ -105,8 +110,7 @@ async def show_folder(callback: CallbackQuery, session_maker: async_sessionmaker
         start = FILES_PER_PAGE * (page - 1)  # define files on the page
         display_files = files[start: start + FILES_PER_PAGE]
         buttons = {f'download:{file.id}:{file_type}': file.file_name for file in display_files}
-
-
+        buttons.update({'choose_delete_file' : 'Delete file'})
         precise_pages = len(files) // FILES_PER_PAGE
         total_pages = precise_pages + 1 if len(files) % FILES_PER_PAGE else precise_pages
         if not total_pages: total_pages = 1
@@ -149,3 +153,65 @@ async def download_file(callback: CallbackQuery, session_maker: async_sessionmak
                 await callback.message.answer_video(tg_file_id)
     await callback.message.delete()
     await callback.answer()
+
+
+@router.callback_query(F.data == 'choose_delete_file') # ❌
+async def choose_file_to_delete(callback: CallbackQuery):
+    keyboard = callback.message.reply_markup.inline_keyboard
+    for i in keyboard:
+        for j in i:
+            if 'download' in j.callback_data:
+                j.text = '❌' + j.text
+                j.callback_data = j.callback_data.replace('download', 'delete')
+    await callback.message.edit_text(text='Choose file to delete',
+                                     reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+
+@router.callback_query(lambda callback: 'delete' in callback.data)
+async def delete_file(callback: CallbackQuery, session_maker: async_sessionmaker):
+    _, file_id, _ = callback.data.split(':')
+    try:
+        async with session_maker() as session:
+            stmt = delete(StorageModel).where(StorageModel.id == int(file_id))
+            await session.execute(stmt)
+            await session.commit()
+        await callback.answer(text='File was successfully deleted!')
+    except:
+        await callback.message.answer("Nothing to delete! (must be a bug then! report pls.)")
+    await callback.answer()
+    await callback.message.delete()
+
+
+@router.message(Command(commands='calendar'), StateFilter(default_state))
+async def display_calendar(message: Message, state: FSMContext):
+    await message.answer("Please select a date: ", reply_markup=await SimpleCalendar().start_calendar())
+    await state.set_state(FSMReminder.choose_date)
+
+@router.callback_query(simple_cal_callback.filter(), StateFilter(FSMReminder.choose_date))
+async def process_date_selection(callback: CallbackQuery, callback_data: dict, state: FSMContext):
+    selected, date = await SimpleCalendar().process_selection(callback, callback_data)
+    current_date = datetime.datetime.date(datetime.datetime.now())
+    if selected and datetime.datetime.date(date) >= current_date:
+        await callback.message.delete()
+        await callback.message.answer(
+            f'You selected {date.strftime("%d/%m/%Y")}',
+        )
+        await callback.message.answer("Now enter time in the 24h format(for example 19:30)")
+        await state.set_state(FSMReminder.choose_time)
+        await state.update_data({'date' : date.strftime("%d/%m/%Y")})
+    elif selected:
+        await callback.answer(show_alert=True, text='You cannot set the reminder in the past')
+
+@router.message(F.text, StateFilter(FSMReminder.choose_time))
+async def process_time_selection(message: Message, state: FSMContext):
+    text = message.text.split(':')
+    try:
+        hours, minutes = int(text[0]), int(text[1])
+        if hours in range(24) and minutes in range(60):
+            date = (await state.get_data())['date']
+            await message.answer(f"Reminder on {date}, at {hours}:{minutes} set successfully!")
+            await state.clear()
+        else:
+            raise ValueError
+    except ValueError:
+        await message.answer('Invalid format for the time!')
