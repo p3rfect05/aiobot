@@ -22,7 +22,7 @@ async def process_vk_auth(message: Message, state: FSMContext):
                          reply_markup=create_link_inline_keyboard(1, **{'Authorize' : auth_link}))
     await state.set_state(FSMVKLogin.acquire_token)
 
-@router.message(lambda message: 'access_token' in message.text, StateFilter(FSMVKLogin.acquire_token))
+@router.message(StateFilter(FSMVKLogin.acquire_token), lambda message: 'access_token' in message.text)
 async def process_vk_token(message: Message, state: FSMContext):
     access_token = re.search(r'access_token=(?P<access_token>.+?)&', message.text)['access_token']
     await message.answer('Your VK token was saved!')

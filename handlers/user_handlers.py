@@ -8,7 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State, default_state
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.filters import Command, CommandStart, StateFilter, CommandObject
+from deep_translator import GoogleTranslator
 from docx2pdf import convert
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -225,7 +226,7 @@ async def process_desc_setting(message: Message, state: FSMContext, session_make
     date: datetime.datetime = (await state.get_data())['date']
     hours, minutes = (await state.get_data())['time']
     await message.answer(f"Reminder:{message.text}\nSet on <b><i>{date.strftime('%d/%m/%Y')}</i></b>, "
-                         f"at <b><i>{hours}:{minutes}</i></b> set successfully!")
+                         f"at <b><i>{str(hours).rjust(2, '0')}:{str(minutes).rjust(2, '0')}</i></b> set successfully!")
     date_with_time = date.replace(hour=hours, minute=minutes)
     async with session_maker.begin() as session:
         new_reminder = ReminderModel(reminder_type='date', reminder_desc=desc, # noqa
@@ -239,3 +240,22 @@ async def process_desc_setting(message: Message, state: FSMContext, session_make
 @router.message(StateFilter(FSMReminder.set_description))
 async def process_invalid_desc_setting(message: Message):
     await message.answer("Invalid description: it must be a string not exceeding 100 symbols!")
+
+
+@router.message(F.text, Command(commands='to_rus'))
+async def translate_text(message: Message, command: CommandObject, en_to_ru_translator: GoogleTranslator):
+    text = command.args
+    if not text:
+        await message.answer("Text to translate should not be <b>empty</b>.")
+    else:
+        translated = en_to_ru_translator.translate(text)
+        await message.answer(translated)
+
+@router.message(F.text, Command(commands='to_eng'))
+async def translate_text(message: Message, command: CommandObject, ru_to_en_translator: GoogleTranslator):
+    text = command.args
+    if not text:
+        await message.answer("Text to translate should not be <b>empty</b>.")
+    else:
+        translated = ru_to_en_translator.translate(text)
+        await message.answer(translated)
