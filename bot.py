@@ -9,7 +9,7 @@ from config_data import get_session_maker
 from aiogram import Dispatcher, Bot
 
 from config_data.config_functions import load_reminders
-from handlers import user_handlers, vk_api_handlers
+from handlers import user_handlers, vk_api_handlers, orioks_handlers
 from middlewares import service_middleware, schedule_middleware
 from external_services import page_preview
 
@@ -26,7 +26,7 @@ async def main():
     dp.update.middleware.register(schedule_middleware.SchedulerMiddleware(scheduler))
     dp.message.middleware.register(service_middleware.UserAllowanceMiddleware(admin_list))
 
-    dp.include_routers(user_handlers.router, page_preview.router, vk_api_handlers.router)
+    dp.include_routers(user_handlers.router, page_preview.router, vk_api_handlers.router, orioks_handlers.router)
 
     postgres_engine_url: URL = URL.create(
         drivername='postgresql+asyncpg',

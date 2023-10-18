@@ -1,3 +1,5 @@
 .env
 main.py
 alembic.ini
+external_services/ya_gpt.py
+external_services/doc_to_pdf_converter.py
