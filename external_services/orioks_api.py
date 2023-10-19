@@ -5,6 +5,8 @@ import aiohttp
 import asyncio
 from environs import Env
 
+from models import OrioksStudentsModel
+
 env: Env = Env()
 env.read_env()
 base_url = 'https://orioks.miet.ru'
@@ -19,6 +21,8 @@ time_table = {
     "7": ["18:30", "19:50"],
     "8" : ["20:00", "21:20"]
 }
+
+NO_LUNCH_DAYS = [3, 4] # only considered for my group at the moment, will be added custom set for different groups
 
 
 class GroupNotExists(BaseException):
@@ -125,3 +129,26 @@ async def get_week_type(token: str):
     current_week = (timedelta.days // 7) + 1
     week_type = (current_week - 1) % 4
     return week_type
+
+
+async def get_full_time_table(student: OrioksStudentsModel) -> tuple[dict[int, list[str]], str]:
+    stud_group, token = student.group.group_id, student.access_token
+    time_table = await get_group_timetable(stud_group, token)
+    today = datetime.datetime.today().weekday()
+
+    time_table_messages: dict = {}
+    week_type = await get_week_type(token)
+    for day in time_table[week_type]:
+        time, class_order, class_type, class_name, class_cabinet, week_type, day_number = day
+        #if day_number == today + 1:
+        if type(time[0]) == list:
+            time = time[day_number in NO_LUNCH_DAYS]
+        subj_msg = '|'.join([f'{time[0]}-{time[1]}', f'{class_type} {class_name}',
+                             class_cabinet]) + '\n'
+
+
+        if day_number in time_table_messages:
+            time_table_messages[day_number].append(subj_msg)
+        else:
+            time_table_messages[day_number] = [subj_msg]
+    return time_table_messages, f'<b>{week_type}</b>\n'

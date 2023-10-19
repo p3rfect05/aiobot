@@ -4,5 +4,5 @@ from sqlalchemy.orm import sessionmaker
 
 
 def get_session_maker(url: URL | str) -> async_sessionmaker:
-    engine: AsyncEngine = create_async_engine(url=url, echo=True, pool_pre_ping=True)
+    engine: AsyncEngine = create_async_engine(url=url, pool_pre_ping=True)
     return async_sessionmaker(engine, class_= AsyncSession)

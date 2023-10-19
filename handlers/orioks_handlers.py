@@ -1,4 +1,5 @@
 import datetime
+import time
 
 from aiogram import Router, Bot, F
 from aiogram.fsm.context import FSMContext
@@ -8,7 +9,7 @@ from aiogram.filters import Command, StateFilter
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from models import UserModel, OrioksStudentsModel, OrioksGroupsModel
 from external_services.orioks_api import get_orioks_token, BadHttpRequest, \
-    get_student_info, get_group_id, get_group_timetable, get_week_type
+    get_student_info, get_group_id, get_group_timetable, get_week_type, get_full_time_table
 
 router = Router()
 
@@ -40,7 +41,8 @@ async def acquire_orioks_token(message: Message, session_maker: async_sessionmak
         student = OrioksStudentsModel(group_fk=student_info['group'], user_fk=message.from_user.id, # noqa
                                       access_token=token, full_name=student_info['full_name']) # noqa
         async with session_maker.begin() as session:
-            session.add(group)
+            if not (await session.get(OrioksGroupsModel, student_info['group'])):
+                session.add(group)
             session.add(student)
 
 
@@ -58,37 +60,91 @@ async def process_invalid_credentials(message: Message):
 
 @router.message(Command(commands='today_class'), StateFilter(default_state))
 async def process_today(message: Message, session_maker: async_sessionmaker):
+    human_week_days = ["Monday", "Tuesday", "Wednesday", 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    today = datetime.datetime.now().weekday()
     async with session_maker.begin() as session:
         user = await session.get(UserModel, message.from_user.id)
-        if not user:
+        student = user.orioks_student
+        if not student:
             await message.answer('You are not logged in ORIOKS!\nType /orioks_login to enable the timetable features')
         else:
-            student = user.orioks_student
-            stud_group, token = student.group.group_id, student.access_token
-            #print(await get_week_type(token))
-            time_table = await get_group_timetable(stud_group, token)
-            today = datetime.datetime.today().weekday()
-            time_table_message: str = ''
-            #print(today, time_table.keys())
-            week_type = await get_week_type(token)
-            for day in time_table[week_type]:
-                #print(subject, type(subject))
-                time, class_order, class_type, class_name, class_cabinet, week_type, day_number = day
-                if day_number == today + 1:
-                    if type(time[0]) == list:
-                        time = time[day_number in NO_LUNCH_DAYS]
-                    if not time_table_message:
-                        time_table_message = f'<b>{week_type}</b>\n'
-
-                    subj_msg = '|'.join([f'{time[0]}-{time[1]}', f'{class_type} {class_name}',
-                                         class_cabinet]) + '\n'
-                    time_table_message += subj_msg
-
-            if not time_table_message:
+            time_table_messages, week_type = await get_full_time_table(student)
+            if today + 1 not in time_table_messages:
                 await message.answer("You have <b>no</b> classes today!")
             else:
-                await message.answer(time_table_message)
+                today_date = datetime.datetime.now()
+                date = datetime.datetime(today_date.year, today_date.month, today_date.day).strftime('%d.%m.%Y')
+
+                await message.answer(f'<b>{human_week_days[today]} {date}\n{week_type}</b>' +
+                                     ''.join(time_table_messages[today + 1]))
 
 
+@router.message(Command(commands='now_class'), StateFilter(default_state))
+async def process_current_class(message: Message, session_maker: async_sessionmaker):
+    human_week_days = ["Monday", "Tuesday", "Wednesday", 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    today = datetime.datetime.now().weekday()
+    async with session_maker.begin() as session:
+        user = await session.get(UserModel, message.from_user.id)
+        student = user.orioks_student
+        if not student:
+            await message.answer('You are not logged in ORIOKS!\nType /orioks_login to enable the timetable features')
+
+        else:
+            time_table_messages, week_type = await get_full_time_table(student)
+            if today + 1 not in time_table_messages:
+                await message.answer("You have <b>no</b> classes today!")
+            else:
+                today_date = datetime.datetime.now()
+                date = datetime.datetime(today_date.year, today_date.month, today_date.day).strftime('%d.%m.%Y')
+                answer: str = ''
+                class_found = False
+                for s_class in time_table_messages[today + 1]:
+
+                    start, end = s_class.split('|')[0].split('-')
+                    start_hours, start_minutes = map(int, start.split(':'))
+                    end_hours, end_minutes = map(int, end.split(':'))
+
+                    start_time, end_time = datetime.time(start_hours, start_minutes), datetime.time(end_hours, end_minutes)
+                    current_time = datetime.time(datetime.datetime.now().hour, datetime.datetime.now().minute)
+
+                    if start_time <= current_time <= end_time:
+                        answer = f'<b>{human_week_days[today]} {date}\n{week_type}</b>' + s_class
+                        class_found = True
+                        await message.answer(answer)
+
+                    if not answer:
+                        next_class_time = datetime.datetime.combine(datetime.date(1, 1, 1), current_time) + datetime.timedelta(minutes=40)
+                        if start_time <= next_class_time.time() <= end_time:
+                            answer = "No class at the moment. Next class is:\n" + f'<b>{human_week_days[today]} {date}\n{week_type}</b>' + s_class
+                            class_found = True
+                            await message.answer(answer)
+
+                if not class_found:
+                    answer = f'<b>{human_week_days[today]} {date}\n{week_type}</b>' + 'No class at the moment!'
+                    await message.answer(answer)
+
+
+@router.message(Command(commands='week_class'), StateFilter(default_state))
+async def process_current_week(message: Message, session_maker: async_sessionmaker):
+    human_week_days = ["Monday", "Tuesday", "Wednesday", 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    today = datetime.datetime.now().weekday()
+    async with session_maker.begin() as session:
+        user = await session.get(UserModel, message.from_user.id)
+        student = user.orioks_student
+        if not student:
+            await message.answer('You are not logged in ORIOKS!\nType /orioks_login to enable the timetable features')
+        else:
+            time_table_messages, week_type = await get_full_time_table(student)
+            full_time_table_message: str = ''
+            full_time_table_message += week_type
+            today_date = datetime.datetime.now()
+            for day in time_table_messages:
+                day_date = datetime.datetime(today_date.year, today_date.month, today_date.day - today_date.weekday() + day - 1)
+                week_day = human_week_days[day_date.weekday()]
+                full_time_table_message += f'<b>{week_day} {day_date.strftime("%d.%m.%Y")}</b>\n'
+                for s_class in time_table_messages[day]:
+                    full_time_table_message += s_class
+
+            await message.answer(full_time_table_message)
 
 
