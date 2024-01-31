@@ -14,6 +14,7 @@ from middlewares import service_middleware, schedule_middleware
 from external_services import page_preview
 
 async def main():
+    print('start')
     config: Config = load_config()
 
     bot: Bot = Bot(token=config.tg_bot.token, parse_mode='html')
@@ -36,6 +37,7 @@ async def main():
         port=config.db.db_port,
         password=config.db.db_password
     )
+    print('connected to db')
     session_maker = get_session_maker(postgres_engine_url)
     await load_reminders(session_maker, scheduler, bot)
     en_to_ru_translator = GoogleTranslator(source='en', target='ru')

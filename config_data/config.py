@@ -27,9 +27,9 @@ def load_config() -> Config:
 
     config = Config(
         tg_bot=TgBot(token=env("BOT_TOKEN"), admin_ids=[6191665532, 513680694]), #513680694
-        db=DatabaseConfig(database=env('DATABASE_NAME'), db_host=env('DATABASE_HOST'),
-                          db_user=env('DATABASE_USERNAME'), db_password=env('DATABASE_USER_PASSWORD'),
-                          db_port=env.int('DATABASE_PORT'))
+        db=DatabaseConfig(database=env('POSTGRES_DB'), db_host=env('POSTGRES_HOST'),
+                          db_user=env('POSTGRES_USER'), db_password=env('POSTGRES_PASSWORD'),
+                          db_port=env.int('POSTGRES_PORT'))
     )
     return config
 

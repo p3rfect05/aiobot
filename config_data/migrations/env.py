@@ -1,16 +1,18 @@
 import asyncio
 from logging.config import fileConfig
-
+from environs import Env
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from models import base_model
 from alembic import context
-from models import UserModel, StorageModel
+from models import *
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
+env: Env = Env()
+env.read_env()
 config = context.config
-
+config.set_main_option('sqlalchemy.url', f'postgresql+asyncpg://{env("POSTGRES_USER")}:{env("POSTGRES_PASSWORD")}@db:'
+                                         f'{env("POSTGRES_PORT")}/{env("POSTGRES_DB")}')
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

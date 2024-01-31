@@ -14,8 +14,8 @@ from docx2pdf import convert
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from aiogram3_calendar import simple_cal_callback
-from external_services.simple_calendar import SimpleCalendar
+#from aiogram3_calendar import simple_cal_callback
+#from external_services.simple_calendar import SimpleCalendar
 from models import UserModel, StorageModel, ReminderModel
 from external_services import get_student_info, doc_to_pdf_converter
 from keyboards import create_inline_keyboard
@@ -185,25 +185,25 @@ async def delete_file(callback: CallbackQuery, session_maker: async_sessionmaker
     await callback.message.delete()
 
 
-@router.message(Command(commands='calendar'), StateFilter(default_state))
-async def display_calendar(message: Message, state: FSMContext):
-    await message.answer("Please select a date: ", reply_markup=await SimpleCalendar().start_calendar())
-    await state.set_state(FSMReminder.choose_date)
+# @router.message(Command(commands='calendar'), StateFilter(default_state))
+# async def display_calendar(message: Message, state: FSMContext):
+#     await message.answer("Please select a date: ", reply_markup=await SimpleCalendar().start_calendar())
+#     await state.set_state(FSMReminder.choose_date)
 
-@router.callback_query(simple_cal_callback.filter(), StateFilter(FSMReminder.choose_date))
-async def process_date_selection(callback: CallbackQuery, callback_data: dict, state: FSMContext):
-    selected, date = await SimpleCalendar().process_selection(callback, callback_data)
-
-    if selected and check_reminder_date(date):
-        await callback.message.delete()
-        # await callback.message.answer(
-        #     f'You selected {date.strftime("%d/%m/%Y")}',
-        # )
-        await callback.message.answer("Now enter time in the 24h format(for example 19:30)")
-        await state.set_state(FSMReminder.choose_time)
-        await state.update_data({'date' : date})
-    elif selected:
-        await callback.answer(show_alert=True, text='You cannot set the reminder in the past')
+# @router.callback_query(simple_cal_callback.filter(), StateFilter(FSMReminder.choose_date))
+# async def process_date_selection(callback: CallbackQuery, callback_data: dict, state: FSMContext):
+#     selected, date = await SimpleCalendar().process_selection(callback, callback_data)
+#
+#     if selected and check_reminder_date(date):
+#         await callback.message.delete()
+#         # await callback.message.answer(
+#         #     f'You selected {date.strftime("%d/%m/%Y")}',
+#         # )
+#         await callback.message.answer("Now enter time in the 24h format(for example 19:30)")
+#         await state.set_state(FSMReminder.choose_time)
+#         await state.update_data({'date' : date})
+#     elif selected:
+#         await callback.answer(show_alert=True, text='You cannot set the reminder in the past')
 
 @router.message(F.text, StateFilter(FSMReminder.choose_time))
 async def process_time_selection(message: Message, state: FSMContext):
@@ -259,3 +259,14 @@ async def translate_text(message: Message, command: CommandObject, ru_to_en_tran
     else:
         translated = ru_to_en_translator.translate(text)
         await message.answer(translated)
+
+
+@router.message(F.content_type == 'video')
+async def download_tiktok_video(message: Message, bot: Bot):
+    file_info = await bot.get_file(message.video.file_id)
+    await bot.download_file(file_path=file_info.file_id, destination='tiktok_videos')
+
+
+@router.message()
+async def func(message: Message):
+    pass

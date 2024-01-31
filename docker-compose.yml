@@ -1,0 +1,27 @@
+version: '3.7'
+services:
+  bot: 
+    build: .
+    command: sh -c "alembic upgrade head && python -m bot"
+    container_name: tg_bot
+    volumes:
+      - .:/usr/src/app
+    env_file:
+      - ./.env
+    restart: unless-stopped
+    depends_on:
+      - db  
+  
+
+  db:
+    image: postgres
+    restart: unless-stopped
+    container_name: postgres
+    env_file:
+      - '.env'
+    volumes:
+      - C:\Users\User\Desktop\my_tg_bot\db_data:/usr/src/app/db_data
+    ports:
+      - 5432:5432
+
+
