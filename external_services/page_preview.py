@@ -1,10 +1,7 @@
-import json
 from aiogram import Router, Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message, InputFile, FSInputFile
 from aiogram.filters import Command, CommandObject
-import aiohttp
-from aiohttp_socks import ProxyType, ProxyConnector
 from environs import Env
 from html2image import Html2Image
 
@@ -16,10 +13,10 @@ env: Env = Env()
 env.read_env()
 
 
-BAN_IMAGE_SECRET_KEY = env('BAN_IMAGE_SECRET_KEY')
-service_url = 'https://api.imageban.ru/v1'
+BAN_IMAGE_SECRET_KEY = env("BAN_IMAGE_SECRET_KEY")
+service_url = "https://api.imageban.ru/v1"
 
-#UNDER CONSTRUCTION
+# UNDER CONSTRUCTION
 # async def use_proxy(page_url, enable_proxy=False):
 #     proxy_connector: ProxyConnector | None = None
 #     if enable_proxy:
@@ -36,15 +33,15 @@ service_url = 'https://api.imageban.ru/v1'
 #             html = await response.text()
 #     return html
 
-@router.message(Command(commands=['screenshot']))
+
+@router.message(Command(commands=["screenshot"]))
 async def upload_and_get_picture(message: Message, command: CommandObject, bot: Bot):
-    hti = Html2Image(size=(1200, 1200), output_path='external_services/temp_pictures')
-    command_args = command.args.split(' ')
+    hti = Html2Image(size=(1200, 1200), output_path="external_services/temp_pictures")
+    command_args = command.args.split(" ")
     page_url = command_args[0]
-    hti.screenshot(url=page_url, save_as='temp.png')
-    photo_url = 'external_services/temp_pictures/temp.png'
+    hti.screenshot(url=page_url, save_as="temp.png")
+    photo_url = "external_services/temp_pictures/temp.png"
     try:
         await bot.send_photo(chat_id=message.chat.id, photo=FSInputFile(photo_url))
     except TelegramBadRequest:
         await message.answer("Invalid URL")
-

@@ -1,7 +1,10 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-def create_link_inline_keyboard(width: int, *args: str, **kwargs: str) -> InlineKeyboardMarkup:
+
+def create_link_inline_keyboard(
+    width: int, *args: str, **kwargs: str
+) -> InlineKeyboardMarkup:
     kb_builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
     buttons: list[InlineKeyboardButton] = []
 
@@ -17,7 +20,9 @@ def create_link_inline_keyboard(width: int, *args: str, **kwargs: str) -> Inline
     return kb_builder.as_markup(resize_keyboard=True)
 
 
-def create_inline_keyboard(width: int, *args: str, **kwargs: str) -> InlineKeyboardMarkup:
+def create_inline_keyboard(
+    width: int, *args: str, **kwargs: str
+) -> InlineKeyboardMarkup:
     kb_builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     buttons: list[InlineKeyboardButton] = []
@@ -32,5 +37,3 @@ def create_inline_keyboard(width: int, *args: str, **kwargs: str) -> InlineKeybo
     kb_builder.row(*buttons, width=1)
 
     return kb_builder.as_markup(resize_keyboard=True)
-
-
